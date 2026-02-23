@@ -69,6 +69,7 @@ class ClickHouseClient:
                 "error": "Разрешены только SELECT запросы",
             })
 
+        # Auto-add LIMIT to prevent accidentally pulling entire tables
         if "LIMIT" not in sql_stripped.upper():
             sql_stripped = f"{sql_stripped.rstrip().rstrip(';')} LIMIT 50000"
 

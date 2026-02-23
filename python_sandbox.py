@@ -19,6 +19,16 @@ plt.rcParams['figure.figsize'] = (10, 6)
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams['font.size'] = 12
 
+# Restricted builtins: only safe functions needed for data analysis.
+# Blocks open(), eval(), exec(), __import__(), compile() to prevent file/code injection.
+_BLOCKED_BUILTINS = frozenset({
+    "open", "eval", "exec", "compile", "__import__",
+    "breakpoint", "exit", "quit", "input",
+    "globals", "locals", "vars",
+})
+_builtins_dict = __builtins__ if isinstance(__builtins__, dict) else __builtins__.__dict__
+_SAFE_BUILTINS = {k: v for k, v in _builtins_dict.items() if k not in _BLOCKED_BUILTINS}
+
 
 class PythonSandbox:
     """Выполнение Python-кода с захватом stdout, result и графиков."""
@@ -56,7 +66,7 @@ class PythonSandbox:
         try:
             with contextlib.redirect_stdout(stdout_capture), \
                  contextlib.redirect_stderr(stderr_capture):
-                exec(code, {"__builtins__": __builtins__}, local_vars)
+                exec(code, {"__builtins__": _SAFE_BUILTINS}, local_vars)
 
             # Захват графиков
             plots = []

@@ -4,6 +4,7 @@ FastAPI сервер — HTTP endpoints для агента.
 
 import asyncio
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI
@@ -13,7 +14,22 @@ from pydantic import BaseModel, Field
 from config import MODEL
 from composite_agent import CompositeAnalysisAgent
 
-app = FastAPI(title="ClickHouse Analysis Agent API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle: periodic cleanup of expired sessions and temp files."""
+    async def cleanup_loop():
+        while True:
+            await asyncio.sleep(1800)  # every 30 minutes
+            agent.chat_storage.cleanup_expired()
+            agent.cleanup_temp_files()
+
+    task = asyncio.create_task(cleanup_loop())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="ClickHouse Analysis Agent API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,14 +83,3 @@ async def analyze(req: AnalyzeRequest):
 @app.get("/api/chat-stats")
 async def chat_stats():
     return agent.chat_storage.get_stats()
-
-
-@app.on_event("startup")
-async def startup():
-    async def cleanup_loop():
-        while True:
-            await asyncio.sleep(1800)
-            agent.chat_storage.cleanup_expired()
-            agent.cleanup_temp_files()
-
-    asyncio.create_task(cleanup_loop())

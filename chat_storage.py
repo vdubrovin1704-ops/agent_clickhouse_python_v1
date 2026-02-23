@@ -85,6 +85,7 @@ class ChatStorage:
             self._trim_messages(conn, session_id)
 
     def save_assistant_message(self, session_id: str, text: str):
+        # Limit stored text to avoid bloating SQLite with large base64/markdown content
         if len(text) > 3000:
             text = text[:3000] + "\n\n[...обрезано...]"
         with self._connect() as conn:

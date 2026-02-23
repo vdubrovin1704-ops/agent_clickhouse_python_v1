@@ -16,6 +16,9 @@ from python_sandbox import PythonSandbox
 from chat_storage import ChatStorage
 from tools import TOOLS_LIST
 
+# Max age of temporary parquet files before cleanup (seconds)
+TEMP_FILE_MAX_AGE = 3600
+
 
 SYSTEM_PROMPT = """Ты — опытный аналитик данных. Ты работаешь с базой данных ClickHouse и анализируешь данные с помощью Python.
 
@@ -224,5 +227,5 @@ class CompositeAnalysisAgent:
     def cleanup_temp_files(self):
         """Удалить parquet файлы старше 1 часа."""
         for f in TEMP_DIR.glob("*.parquet"):
-            if f.stat().st_mtime < time.time() - 3600:
+            if f.stat().st_mtime < time.time() - TEMP_FILE_MAX_AGE:
                 f.unlink(missing_ok=True)
