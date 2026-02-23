@@ -1,0 +1,15 @@
+[Unit]
+Description=ClickHouse Analysis Agent (API Server)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/composite_agent
+ExecStart=/root/composite_agent/venv/bin/uvicorn api_server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+EnvironmentFile=/root/composite_agent/.env
+
+[Install]
+WantedBy=multi-user.target
