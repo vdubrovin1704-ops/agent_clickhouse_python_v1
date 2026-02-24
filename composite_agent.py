@@ -3,6 +3,7 @@
 Реализует агентный цикл через Anthropic Messages API с tool_use
 """
 import json
+import logging
 import time
 import traceback
 from pathlib import Path
@@ -12,6 +13,8 @@ from clickhouse_client import ClickHouseClient
 from python_sandbox import PythonSandbox
 from chat_storage import ChatStorage
 from tools import TOOLS, SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 
 
 class CompositeAnalysisAgent:
@@ -33,6 +36,9 @@ class CompositeAnalysisAgent:
         Выполнить анализ по запросу пользователя.
         Возвращает dict с результатами.
         """
+        start_total = time.time()
+        logger.info("📥 Начало анализа: session_id=%s query=%.80r", session_id, user_query)
+
         # 0. Sanitize input (предотвращает UTF-8 ошибки)
         user_query = user_query.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
 
@@ -54,6 +60,7 @@ class CompositeAnalysisAgent:
 
         # 5. АГЕНТНЫЙ ЦИКЛ (из рабочего CLI агента)
         for iteration in range(max_iterations):
+            logger.info("🔄 Итерация %d: вызов Claude API (session_id=%s)", iteration + 1, session_id)
 
             # 5a. Вызов Claude
             try:
@@ -65,6 +72,10 @@ class CompositeAnalysisAgent:
                     messages=messages,
                 )
             except Exception as e:
+                logger.error(
+                    "❌ Ошибка Claude API на итерации %d (session_id=%s): %s\n%s",
+                    iteration + 1, session_id, e, traceback.format_exc(),
+                )
                 return {
                     "success": False,
                     "text_output": "",
@@ -73,6 +84,11 @@ class CompositeAnalysisAgent:
                     "error": f"Ошибка вызова Claude API: {str(e)}",
                     "session_id": session_id,
                 }
+
+            logger.info(
+                "🔄 Итерация %d: stop_reason=%s (session_id=%s)",
+                iteration + 1, response.stop_reason, session_id,
+            )
 
             # 5b. Если Claude закончил (stop_reason == "end_turn")
             if response.stop_reason == "end_turn":
@@ -87,6 +103,11 @@ class CompositeAnalysisAgent:
                 # Сохранить ответ ассистента
                 self.chat_storage.save_assistant_message(session_id, final_text)
 
+                elapsed = round(time.time() - start_total, 1)
+                logger.info(
+                    "✅ Анализ завершён: session_id=%s success=True plots=%d tool_calls=%d time=%.1fs",
+                    session_id, len(all_plots), len(tool_calls_log), elapsed,
+                )
                 return {
                     "success": True,
                     "text_output": final_text,
@@ -156,6 +177,11 @@ class CompositeAnalysisAgent:
                 messages.append({"role": "user", "content": tool_results_content})
 
             else:
+                elapsed = round(time.time() - start_total, 1)
+                logger.error(
+                    "❌ Неожиданный stop_reason=%s на итерации %d (session_id=%s, time=%.1fs)",
+                    response.stop_reason, iteration + 1, session_id, elapsed,
+                )
                 # Неожиданный stop_reason
                 return {
                     "success": False,
@@ -167,6 +193,11 @@ class CompositeAnalysisAgent:
                 }
 
         # Если вышли из цикла по лимиту
+        elapsed = round(time.time() - start_total, 1)
+        logger.error(
+            "❌ Превышен лимит итераций: session_id=%s tool_calls=%d time=%.1fs",
+            session_id, len(tool_calls_log), elapsed,
+        )
         return {
             "success": False,
             "text_output": "",
@@ -178,27 +209,40 @@ class CompositeAnalysisAgent:
 
     def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
         """Выполнить tool и вернуть результат как JSON-строку"""
+        # Краткое представление входных параметров для лога
+        input_summary = str(tool_input)[:120]
+        logger.info("🔧 Tool start: %s | input=%s", tool_name, input_summary)
+        t_start = time.time()
         try:
             if tool_name == "list_tables":
                 # list_tables() уже возвращает JSON-строку (как в CLI агенте)
-                return self.ch_client.list_tables()
+                result = self.ch_client.list_tables()
 
             elif tool_name == "clickhouse_query":
                 # execute_query() уже возвращает JSON-строку (как в CLI агенте)
-                return self.ch_client.execute_query(tool_input["sql"])
+                result = self.ch_client.execute_query(tool_input["sql"])
 
             elif tool_name == "python_analysis":
-                result = self.sandbox.execute(
+                raw = self.sandbox.execute(
                     code=tool_input["code"],
                     parquet_path=tool_input["parquet_path"],
                 )
                 # sandbox.execute() возвращает dict, сериализуем в JSON
-                return json.dumps(result, ensure_ascii=False, default=str)
+                result = json.dumps(raw, ensure_ascii=False, default=str)
 
             else:
-                return json.dumps({"error": f"Unknown tool: {tool_name}"})
+                result = json.dumps({"error": f"Unknown tool: {tool_name}"})
+
+            elapsed = round(time.time() - t_start, 1)
+            logger.info("✅ Tool done: %s | time=%.1fs", tool_name, elapsed)
+            return result
 
         except Exception as e:
+            elapsed = round(time.time() - t_start, 1)
+            logger.error(
+                "❌ Tool error: %s | time=%.1fs | error=%s\n%s",
+                tool_name, elapsed, e, traceback.format_exc(),
+            )
             return json.dumps({
                 "error": str(e),
                 "traceback": traceback.format_exc()
