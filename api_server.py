@@ -3,15 +3,27 @@ FastAPI сервер для комплексного агента
 Предоставляет HTTP API и веб-интерфейс для работы с агентом
 """
 import asyncio
+import logging
+import time
+import traceback
 import uuid
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from composite_agent import CompositeAnalysisAgent
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 # Инициализация FastAPI
 app = FastAPI(
@@ -28,6 +40,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Таймаут агента (секунды)
+AGENT_TIMEOUT = 240
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Логирование всех входящих HTTP-запросов"""
+    start = time.time()
+    response = await call_next(request)
+    elapsed = round(time.time() - start, 1)
+    logger.info(
+        "📡 %s %s → %d (%.1fs)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed,
+    )
+    return response
 
 # Глобальный экземпляр агента
 agent = None
@@ -56,9 +87,9 @@ async def startup():
     global agent
     try:
         agent = CompositeAnalysisAgent()
-        print("✅ Агент инициализирован")
+        logger.info("✅ Агент инициализирован")
     except Exception as e:
-        print(f"❌ Ошибка инициализации агента: {e}")
+        logger.error("❌ Ошибка инициализации агента: %s", e)
         raise
 
     # Фоновая задача для очистки
@@ -69,7 +100,7 @@ async def startup():
                 agent.chat_storage.cleanup_expired()
                 agent.cleanup_temp_files()
             except Exception as e:
-                print(f"❌ Ошибка очистки: {e}")
+                logger.error("❌ Ошибка очистки: %s", e)
 
     asyncio.create_task(cleanup_loop())
 
@@ -137,12 +168,55 @@ async def analyze(request: AnalyzeRequest):
     # Генерация session_id если не передан
     session_id = request.session_id or str(uuid.uuid4())
 
+    logger.info("📥 Запрос: session_id=%s query=%.80r", session_id, request.query)
+    start = time.time()
+
     # Выполнение анализа в отдельном потоке (синхронный anthropic client)
     try:
-        result = await asyncio.to_thread(agent.analyze, request.query, session_id)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(agent.analyze, request.query, session_id),
+            timeout=AGENT_TIMEOUT,
+        )
+        elapsed = round(time.time() - start, 1)
+        logger.info(
+            "✅ Ответ: session_id=%s success=%s tool_calls=%d plots=%d time=%.1fs",
+            session_id,
+            result.get("success"),
+            len(result.get("tool_calls", [])),
+            len(result.get("plots", [])),
+            elapsed,
+        )
         result["timestamp"] = datetime.now().isoformat()
         return result
+    except asyncio.TimeoutError:
+        elapsed = round(time.time() - start, 1)
+        logger.error(
+            "❌ Таймаут: session_id=%s time=%.1fs (лимит %ds)",
+            session_id,
+            elapsed,
+            AGENT_TIMEOUT,
+        )
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "session_id": session_id,
+                "text_output": "",
+                "plots": [],
+                "tool_calls": [],
+                "error": f"Запрос превысил таймаут {AGENT_TIMEOUT} секунд. Попробуйте упростить запрос.",
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
     except Exception as e:
+        elapsed = round(time.time() - start, 1)
+        logger.error(
+            "❌ Ошибка: session_id=%s time=%.1fs error=%s\n%s",
+            session_id,
+            elapsed,
+            e,
+            traceback.format_exc(),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
