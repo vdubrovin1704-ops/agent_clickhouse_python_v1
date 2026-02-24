@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment
+.env
+
+# Database
+chat_history.db
+chat_history.db-shm
+chat_history.db-wal
+
+# Temp data
+temp_data/
+*.parquet
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# SSL
+*.crt
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
