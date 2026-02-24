@@ -1,0 +1,45 @@
+[Unit]
+Description=ClickHouse Analysis Agent API Server
+After=network.target
+Documentation=https://github.com/vdubrovin1704-ops/agent_clickhouse_python_v1
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Рабочая директория - ИЗМЕНИТЕ НА АКТУАЛЬНЫЙ ПУТЬ
+WorkingDirectory=/opt/agent_api/agent_clickhouse_python_v1
+
+# PATH для виртуального окружения - ИЗМЕНИТЕ НА АКТУАЛЬНЫЙ ПУТЬ
+Environment="PATH=/opt/agent_api/agent_clickhouse_python_v1/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Команда запуска - ИЗМЕНИТЕ НА АКТУАЛЬНЫЙ ПУТЬ
+ExecStart=/opt/agent_api/agent_clickhouse_python_v1/venv/bin/python api_server.py
+
+# Загрузка переменных окружения из .env - ИЗМЕНИТЕ НА АКТУАЛЬНЫЙ ПУТЬ
+EnvironmentFile=/opt/agent_api/agent_clickhouse_python_v1/.env
+
+# Автоматический перезапуск при падении
+Restart=always
+RestartSec=5
+
+# Таймауты
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+# Логи
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=agent-api
+
+# Безопасность (опционально)
+# NoNewPrivileges=true
+# PrivateTmp=true
+# ProtectSystem=strict
+# ProtectHome=true
+# ReadWritePaths=/opt/agent_api/agent_clickhouse_python_v1/temp_data
+# ReadWritePaths=/opt/agent_api/agent_clickhouse_python_v1/chat_history.db
+
+[Install]
+WantedBy=multi-user.target
