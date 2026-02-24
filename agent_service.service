@@ -1,0 +1,20 @@
+[Unit]
+Description=ClickHouse Analysis Agent API Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/agent_clickhouse_python_v1
+Environment="PATH=/root/agent_clickhouse_python_v1/venv/bin"
+ExecStart=/root/agent_clickhouse_python_v1/venv/bin/python api_server.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Загрузка переменных окружения из .env
+EnvironmentFile=/root/agent_clickhouse_python_v1/.env
+
+[Install]
+WantedBy=multi-user.target
