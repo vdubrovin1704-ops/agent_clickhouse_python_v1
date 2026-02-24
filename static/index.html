@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClickHouse Analysis Agent - Web Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .status-bar {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #6c757d;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.online {
+            background-color: #28a745;
+        }
+
+        .status-dot.error {
+            background-color: #dc3545;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .model-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .messages-area {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            padding: 15px 20px;
+            border-radius: 10px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background: #667eea;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.agent {
+            background: white;
+            border: 1px solid #e9ecef;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            align-self: center;
+            max-width: 100%;
+        }
+
+        .message-header {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+
+        .message-content {
+            line-height: 1.6;
+        }
+
+        .message-content pre {
+            background: rgba(0,0,0,0.05);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .message-images {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message-images img {
+            max-width: 100%;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .loading {
+            display: flex;
+            gap: 8px;
+            padding: 15px 20px;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            align-self: flex-start;
+            max-width: 200px;
+        }
+
+        .loading-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area textarea {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-area textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-area button {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .input-area button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .examples {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .examples h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .example-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .example-btn {
+            padding: 8px 15px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .example-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .session-info {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .tool-calls {
+            background: #e7f5ff;
+            border-left: 3px solid #339af0;
+            padding: 10px 15px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .tool-calls-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #1864ab;
+        }
+
+        .tool-call {
+            margin: 5px 0;
+            padding: 5px 10px;
+            background: white;
+            border-radius: 3px;
+        }
+
+        .new-session-btn {
+            padding: 8px 15px;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .new-session-btn:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .status-bar {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+
+            .content {
+                padding: 15px;
+            }
+
+            .message {
+                max-width: 95%;
+            }
+
+            .input-area {
+                flex-direction: column;
+            }
+
+            .input-area button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 ClickHouse Analysis Agent</h1>
+            <p>Интеллектуальный анализ данных с помощью Claude Sonnet 4</p>
+        </div>
+
+        <div class="main-card">
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Проверка соединения...</span>
+                </div>
+                <div class="model-info">
+                    <span id="modelInfo">🧠 Claude Sonnet 4</span>
+                </div>
+                <div class="session-info">
+                    <button class="new-session-btn" onclick="startNewSession()">🔄 Новая сессия</button>
+                </div>
+            </div>
+
+            <div class="content">
+                <div class="chat-container">
+                    <div class="messages-area" id="messagesArea">
+                        <div class="message agent">
+                            <div class="message-content">
+                                Привет! Я ИИ-агент для анализа данных из ClickHouse. Я могу:
+                                <ul style="margin-top: 10px; padding-left: 20px;">
+                                    <li>📊 Выгружать данные из базы данных</li>
+                                    <li>📈 Анализировать данные с помощью Python</li>
+                                    <li>📉 Строить графики и визуализации</li>
+                                    <li>💡 Отвечать на вопросы о ваших данных</li>
+                                </ul>
+                                <p style="margin-top: 10px;">Попробуйте один из примеров ниже или задайте свой вопрос!</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="input-area">
+                        <textarea
+                            id="queryInput"
+                            placeholder="Напишите запрос на русском языке..."
+                            rows="3"
+                            onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendQuery(); }"
+                        ></textarea>
+                        <button onclick="sendQuery()" id="sendButton">
+                            📤 Отправить
+                        </button>
+                    </div>
+
+                    <div class="examples">
+                        <h3>💡 Примеры запросов:</h3>
+                        <div class="example-buttons">
+                            <button class="example-btn" onclick="setQuery('Покажи список всех таблиц в базе данных')">
+                                📋 Список таблиц
+                            </button>
+                            <button class="example-btn" onclick="setQuery('Выгрузи первые 100 записей из таблицы sales')">
+                                📊 Выгрузить данные
+                            </button>
+                            <button class="example-btn" onclick="setQuery('Покажи топ-10 товаров по выручке и построй bar chart')">
+                                📈 Топ товаров с графиком
+                            </button>
+                            <button class="example-btn" onclick="setQuery('Посчитай общую выручку по месяцам за 2024 год и построй line chart')">
+                                📉 Выручка по месяцам
+                            </button>
+                            <button class="example-btn" onclick="setQuery('Проанализируй данные и покажи основные статистические показатели')">
+                                🔍 Статистический анализ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let apiBaseUrl = window.location.origin;
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            checkHealth();
+            generateSessionId();
+        });
+
+        // Генерация ID сессии
+        function generateSessionId() {
+            sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            console.log('Session ID:', sessionId);
+        }
+
+        // Новая сессия
+        function startNewSession() {
+            if (confirm('Начать новую сессию? История диалога будет сброшена.')) {
+                generateSessionId();
+                const messagesArea = document.getElementById('messagesArea');
+                messagesArea.innerHTML = '';
+                addMessage('agent', 'Новая сессия начата! Чем могу помочь?');
+            }
+        }
+
+        // Проверка здоровья API
+        async function checkHealth() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const modelInfo = document.getElementById('modelInfo');
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/health`);
+                if (response.ok) {
+                    statusDot.classList.add('online');
+                    statusText.textContent = 'API онлайн';
+
+                    // Получить информацию о модели
+                    const infoResponse = await fetch(`${apiBaseUrl}/api/info`);
+                    if (infoResponse.ok) {
+                        const info = await infoResponse.json();
+                        modelInfo.textContent = `🧠 ${info.model}`;
+                    }
+                } else {
+                    throw new Error('API недоступен');
+                }
+            } catch (error) {
+                statusDot.classList.add('error');
+                statusText.textContent = 'API недоступен';
+                console.error('Health check failed:', error);
+            }
+        }
+
+        // Установить запрос из примера
+        function setQuery(query) {
+            document.getElementById('queryInput').value = query;
+            document.getElementById('queryInput').focus();
+        }
+
+        // Добавить сообщение
+        function addMessage(type, content, images = [], toolCalls = []) {
+            const messagesArea = document.getElementById('messagesArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            let html = `<div class="message-content">${formatContent(content)}</div>`;
+
+            // Добавить информацию о tool calls
+            if (toolCalls && toolCalls.length > 0) {
+                html += '<div class="tool-calls">';
+                html += '<div class="tool-calls-title">Использованные инструменты:</div>';
+                toolCalls.forEach(tool => {
+                    html += `<div class="tool-call">🔧 ${tool.tool || tool.name || 'Unknown'}</div>`;
+                });
+                html += '</div>';
+            }
+
+            // Добавить изображения
+            if (images && images.length > 0) {
+                html += '<div class="message-images">';
+                images.forEach(img => {
+                    html += `<img src="data:image/png;base64,${img}" alt="График">`;
+                });
+                html += '</div>';
+            }
+
+            messageDiv.innerHTML = html;
+            messagesArea.appendChild(messageDiv);
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        // Форматирование контента
+        function formatContent(content) {
+            // Простое форматирование markdown
+            content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            content = content.replace(/\n\n/g, '</p><p>');
+            content = content.replace(/\n/g, '<br>');
+            content = '<p>' + content + '</p>';
+            return content;
+        }
+
+        // Показать индикатор загрузки
+        function showLoading() {
+            const messagesArea = document.getElementById('messagesArea');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.id = 'loadingIndicator';
+            loadingDiv.innerHTML = `
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            `;
+            messagesArea.appendChild(loadingDiv);
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+        // Скрыть индикатор загрузки
+        function hideLoading() {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+        }
+
+        // Отправить запрос
+        async function sendQuery() {
+            const queryInput = document.getElementById('queryInput');
+            const sendButton = document.getElementById('sendButton');
+            const query = queryInput.value.trim();
+
+            if (!query) {
+                alert('Пожалуйста, введите запрос');
+                return;
+            }
+
+            // Заблокировать UI
+            queryInput.disabled = true;
+            sendButton.disabled = true;
+
+            // Добавить сообщение пользователя
+            addMessage('user', query);
+
+            // Очистить поле ввода
+            queryInput.value = '';
+
+            // Показать индикатор загрузки
+            showLoading();
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/analyze`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        session_id: sessionId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                hideLoading();
+
+                if (result.success) {
+                    addMessage('agent', result.text_output, result.plots || [], result.tool_calls || []);
+                } else {
+                    addMessage('error', `Ошибка: ${result.error || 'Неизвестная ошибка'}`);
+                }
+            } catch (error) {
+                hideLoading();
+                addMessage('error', `Ошибка при отправке запроса: ${error.message}`);
+                console.error('Error:', error);
+            } finally {
+                // Разблокировать UI
+                queryInput.disabled = false;
+                sendButton.disabled = false;
+                queryInput.focus();
+            }
+        }
+    </script>
+</body>
+</html>
