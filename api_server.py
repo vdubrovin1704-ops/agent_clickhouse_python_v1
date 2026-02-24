@@ -1,13 +1,15 @@
 """
-FastAPI сервер для комплексного агента (ОПЦИОНАЛЬНО)
-Этот файл можно использовать для создания HTTP API в будущем
+FastAPI сервер для комплексного агента
+Предоставляет HTTP API и веб-интерфейс для работы с агентом
 """
 import asyncio
 import uuid
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from composite_agent import CompositeAnalysisAgent
 
@@ -72,22 +74,22 @@ async def startup():
     asyncio.create_task(cleanup_loop())
 
 
-@app.get("/")
-async def root():
-    """Health check"""
-    return {
-        "status": "online",
-        "model": "Claude Sonnet 4",
-        "service": "ClickHouse Analysis Agent"
-    }
-
-
 @app.get("/health")
 async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/api/status")
+async def status():
+    """API status"""
+    return {
+        "status": "online",
+        "model": "Claude Sonnet 4",
+        "service": "ClickHouse Analysis Agent"
     }
 
 
@@ -155,6 +157,13 @@ async def chat_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Монтирование статических файлов (веб-интерфейс)
+# Должно быть в конце, чтобы не перехватывать API роуты
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
 
 if __name__ == "__main__":
