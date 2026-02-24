@@ -1,0 +1,11 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+venv/
+.venv/
+temp_data/
+chat_history.db
+*.parquet
+*.db
+.DS_Store
